@@ -1,12 +1,16 @@
 require('es6-promise').polyfill();
 var rest = require('restler');
 var objectAssign = require('object-assign');
+var performance = require('perf_hooks').performance
 
 var minRequestDelay = 500;
 var maxRequestDelay = 7000;
 
+
+const basePath = "https://api.trello.com"
+
 var Trello = function (key, token) {
-    this.uri = "https://api.trello.com";
+    this.uri = basePath;
     this.key = key;
     this.token = token;
 };
@@ -15,13 +19,26 @@ Trello.prototype.createQuery = function () {
     return {key: this.key, token: this.token};
 };
 
+function debugOutput(t0, uri, options) {
+  const t1 = performance.now()
+  const method = options.method
+  const { key, token, ...query } = options.query
+  const path = uri.slice(basePath.length)
+  const optsStr = Object.keys(query).length > 0
+    ? ` ${JSON.stringify(query)}` : ''
+  console.log(`${method} ${path}${optsStr} in ${(t1 - t0).toFixed(0)}ms`)
+}
+
 function makeRequest(fn, uri, options, callback) {
+
+    var t0 = performance.now()
     if (callback) {
       var completeCallback = function (result, response) {
         // in case we hit HTTP 429, delay requests by random timeout in between minRequestDelay and maxRequestDelay
         // http://help.trello.com/article/838-api-rate-limits
         if(response && response.statusCode === 429) {
           setTimeout(() => {
+            t0 = performance.now()
             fn(uri, options).once('complete', completeCallback)
           }, Math.floor(Math.random() * (maxRequestDelay - minRequestDelay)) + minRequestDelay);
         }
@@ -32,6 +49,7 @@ function makeRequest(fn, uri, options, callback) {
             rv.response = response
             callback(rv, null)
         } else {
+            debugOutput(t0, uri, options)
             callback(null, result);
         }
       }
@@ -46,6 +64,7 @@ function makeRequest(fn, uri, options, callback) {
               // http://help.trello.com/article/838-api-rate-limits
               if(response && response.statusCode === 429) {
                 setTimeout(() => {
+                  t0 = performance.now()
                   fn(uri, options).once('complete', completeCallback)
                 }, Math.floor(Math.random() * (maxRequestDelay - minRequestDelay)) + minRequestDelay);
               }
@@ -56,6 +75,7 @@ function makeRequest(fn, uri, options, callback) {
                   rv.response = response
                   reject(rv)
               } else {
+                  debugOutput(t0, uri, options)
                   resolve(result);
               }
             }
@@ -275,7 +295,7 @@ Trello.prototype.getCardsOnBoard = function (boardId, callback) {
 };
 
 Trello.prototype.getCardsOnBoardWithExtraParams = function (boardId, extraParams, callback) {
-    var query = this.createQuery();    
+    var query = this.createQuery();
     Object.assign(query, extraParams);
 
     return makeRequest(rest.get, this.uri + '/1/boards/' + boardId + '/cards', {query: query}, callback);
@@ -286,7 +306,7 @@ Trello.prototype.getCardsOnList = function (listId, callback) {
 };
 
 Trello.prototype.getCardsOnListWithExtraParams = function (listId, extraParams, callback) {
-    var query = this.createQuery();    
+    var query = this.createQuery();
     Object.assign(query, extraParams);
 
     return makeRequest(rest.get, this.uri + '/1/lists/' + listId + '/cards', {query: query}, callback);
